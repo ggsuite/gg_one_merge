@@ -6,4 +6,7 @@
 
 library;
 
-export 'src/gg_one_merge.dart';
+export 'src/commands/can/can_merge.dart';
+export 'src/tools/create_pull_request.dart';
+export 'src/tools/lock_files.dart';
+export 'src/tools/merge_flow.dart';
