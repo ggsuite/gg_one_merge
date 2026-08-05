@@ -1,6 +1,6 @@
 name: gg_one_merge
 description: "Merge flow machinery of the gg_one tool family - merging feature branches via pull requests or local merges."
-version: 1.0.0
+version: 1.0.1
 repository: https://github.com/ggsuite/gg_one_merge.git
 
 environment:
