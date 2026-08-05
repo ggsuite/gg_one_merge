@@ -45,10 +45,18 @@ packages:
     dependency: transitive
     description:
       name: change
-      sha256: "3bda1ce98526b21927cdea05688563c7065fd7e66d1abbe176c354fef3b2057b"
+      sha256: "75b6e28073433946a987e6082d00f08676a8260a6aa68cac8594c10611e7e9b9"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.5"
+    version: "0.7.2"
+  characters:
+    dependency: transitive
+    description:
+      name: characters
+      sha256: faf38497bda5ead2a8c7615f4f7939df04333478bf32e4173fcb06d428b5716b
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.1"
   checked_yaml:
     dependency: transitive
     description:
@@ -121,6 +129,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
+  dart_console:
+    dependency: transitive
+    description:
+      name: dart_console
+      sha256: dfa4b63eb4382325ff975fdb6b7a0db8303bb5809ee5cb4516b44153844742ed
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.0"
+  ffi:
+    dependency: transitive
+    description:
+      name: ffi
+      sha256: "6d7fd89431262d8f3125e81b50d3847a091d846eafcd4fdb88dd06f36d705a45"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.0"
   file:
     dependency: transitive
     description:
@@ -233,13 +257,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.1"
-  gg_one_checks:
-    dependency: "direct overridden"
-    description:
-      path: "../gg_one_checks"
-      relative: true
-    source: path
-    version: "1.0.0"
   gg_one_commit:
     dependency: "direct main"
     description:
@@ -247,10 +264,10 @@ packages:
       relative: true
     source: path
     version: "1.0.0"
-  gg_one_state:
+  gg_one_core:
     dependency: "direct main"
     description:
-      path: "../gg_one_state"
+      path: "../gg_one_core"
       relative: true
     source: path
     version: "1.0.0"
@@ -334,14 +351,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.2"
+  interact:
+    dependency: transitive
+    description:
+      name: interact
+      sha256: b1abf79334bec42e58496a054cb7ee7ca74da6181f6a1fb6b134f1aa22bc4080
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.0"
   intl:
     dependency: transitive
     description:
       name: intl
-      sha256: "1ca20c894b1717686a2319b8548763d812bc0aabdac580420a44c5178c57a867"
+      sha256: "3bc132a9dbce73a7e4a21a17d06e1878839ffbf975568bc875c60537824b0c4d"
       url: "https://pub.dev"
     source: hosted
-    version: "0.20.3"
+    version: "0.18.1"
   io:
     dependency: transitive
     description:
@@ -598,6 +623,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.6.19"
+  tint:
+    dependency: transitive
+    description:
+      name: tint
+      sha256: "9652d9a589f4536d5e392cf790263d120474f15da3cf1bee7f1fdb31b4de5f46"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.1"
   typed_data:
     dependency: transitive
     description:
@@ -662,6 +695,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.2.1"
+  win32:
+    dependency: transitive
+    description:
+      name: win32
+      sha256: d7cb55e04cd34096cd3a79b3330245f54cb96a370a1c27adb3c84b917de8b08e
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.15.0"
   yaml:
     dependency: transitive
     description:
