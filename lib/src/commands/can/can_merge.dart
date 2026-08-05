@@ -4,7 +4,7 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
-import 'package:gg_one_state/gg_one_state.dart';
+import 'package:gg_one_core/gg_one_core.dart';
 import 'package:gg_args/gg_args.dart';
 import 'package:gg_merge/gg_merge.dart' as gg_merge;
 import 'package:gg_one_commit/gg_one_commit.dart';
