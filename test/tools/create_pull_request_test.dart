@@ -118,6 +118,23 @@ void main() {
   }
 
   // ...........................................................................
+  /// One pull request as `az repos pr list` prints it: the repository holds
+  /// the rest api url plus the project and repository names, and no web url
+  /// at all. `remoteUrl` is null, as it is on current `az` versions.
+  String azurePr(
+    int id, {
+    String organization = 'o',
+    String project = 'p',
+    String repository = 'r',
+  }) =>
+      '[{"pullRequestId":$id,"repository":{'
+      '"name":"$repository",'
+      '"project":{"name":"$project"},'
+      '"remoteUrl":null,'
+      '"url":"https://dev.azure.com/$organization/902c4d10'
+      '/_apis/git/repositories/e8321401"}}]';
+
+  // ...........................................................................
   void stubMergeGit() {
     when(
       () => mockMergeGit.get(
@@ -324,16 +341,8 @@ void main() {
           stubMergeGit();
         });
 
-        test('builds the url from the repository url and the id', () async {
-          stubAzureList([
-            ProcessResult(
-              0,
-              0,
-              '[{"pullRequestId":42,"repository":'
-                  '{"webUrl":"https://dev.azure.com/o/p/_git/r"}}]',
-              '',
-            ),
-          ]);
+        test('builds the url from organization, project, repo, id', () async {
+          stubAzureList([ProcessResult(0, 0, azurePr(42), '')]);
 
           final url = await createPullRequest.get(directory: d, ggLog: ggLog);
 
@@ -351,13 +360,7 @@ void main() {
         test('creates the pull request without automerge', () async {
           stubAzureList([
             ProcessResult(0, 0, '[]', ''),
-            ProcessResult(
-              0,
-              0,
-              '[{"pullRequestId":43,"repository":'
-                  '{"webUrl":"https://dev.azure.com/o/p/_git/r"}}]',
-              '',
-            ),
+            ProcessResult(0, 0, azurePr(43), ''),
           ]);
 
           final url = await createPullRequest.get(
@@ -395,12 +398,12 @@ void main() {
           );
         });
 
-        test('ignores a repository without a web url', () async {
+        test('ignores a repository the web url cannot be built from', () async {
           stubAzureList([
             ProcessResult(
               0,
               0,
-              '[{"pullRequestId":45,"repository":{"webUrl":""}}]',
+              '[{"pullRequestId":45,"repository":{"name":"r"}}]',
               '',
             ),
           ]);
@@ -416,7 +419,8 @@ void main() {
             ProcessResult(
               0,
               0,
-              '[{"repository":{"webUrl":"https://dev.azure.com/o/p/_git/r"}}]',
+              '[{"repository":{"name":"r","project":{"name":"p"},'
+                  '"url":"https://dev.azure.com/o/x/_apis/git/repositories/y"}}]',
               '',
             ),
           ]);
@@ -424,6 +428,111 @@ void main() {
           await expectLater(
             createPullRequest.get(directory: d, ggLog: ggLog),
             throwsA(isA<Exception>()),
+          );
+        });
+
+        test('falls back to »remoteUrl« without its user info', () async {
+          stubAzureList([
+            ProcessResult(
+              0,
+              0,
+              '[{"pullRequestId":46,"repository":'
+                  '{"remoteUrl":"https://o@dev.azure.com/o/p/_git/r"}}]',
+              '',
+            ),
+          ]);
+
+          final url = await createPullRequest.get(directory: d, ggLog: ggLog);
+
+          expect(url, 'https://dev.azure.com/o/p/_git/r/pullrequest/46');
+        });
+
+        test('keeps a »remoteUrl« that has no user info', () async {
+          stubAzureList([
+            ProcessResult(
+              0,
+              0,
+              '[{"pullRequestId":48,"repository":'
+                  '{"remoteUrl":"https://dev.azure.com/o/p/_git/r"}}]',
+              '',
+            ),
+          ]);
+
+          final url = await createPullRequest.get(directory: d, ggLog: ggLog);
+
+          expect(url, 'https://dev.azure.com/o/p/_git/r/pullrequest/48');
+        });
+
+        test('ignores a repository url that is not a rest api url', () async {
+          stubAzureList([
+            ProcessResult(
+              0,
+              0,
+              '[{"pullRequestId":49,"repository":{"name":"r",'
+                  '"project":{"name":"p"},'
+                  '"url":"https://dev.azure.com/o/p"}}]',
+              '',
+            ),
+          ]);
+
+          await expectLater(
+            createPullRequest.get(directory: d, ggLog: ggLog),
+            throwsA(isA<Exception>()),
+          );
+        });
+
+        test('ignores a repository url without scheme and host', () async {
+          stubAzureList([
+            ProcessResult(
+              0,
+              0,
+              '[{"pullRequestId":50,"repository":{"name":"r",'
+                  '"project":{"name":"p"},'
+                  '"url":"o/_apis/git/repositories/x"}}]',
+              '',
+            ),
+          ]);
+
+          await expectLater(
+            createPullRequest.get(directory: d, ggLog: ggLog),
+            throwsA(isA<Exception>()),
+          );
+        });
+
+        test('ignores an unparsable repository url', () async {
+          stubAzureList([
+            ProcessResult(
+              0,
+              0,
+              '[{"pullRequestId":51,"repository":{"name":"r",'
+                  '"project":{"name":"p"},'
+                  r'"url":"https://dev.azure.com:port/o/_apis/x"}}]',
+              '',
+            ),
+          ]);
+
+          await expectLater(
+            createPullRequest.get(directory: d, ggLog: ggLog),
+            throwsA(isA<Exception>()),
+          );
+        });
+
+        test('encodes project and repository names', () async {
+          stubAzureList([
+            ProcessResult(
+              0,
+              0,
+              azurePr(47, project: 'my project', repository: 'my repo'),
+              '',
+            ),
+          ]);
+
+          final url = await createPullRequest.get(directory: d, ggLog: ggLog);
+
+          expect(
+            url,
+            'https://dev.azure.com/o/my%20project/_git/my%20repo'
+            '/pullrequest/47',
           );
         });
       });
