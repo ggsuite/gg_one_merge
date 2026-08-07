@@ -309,10 +309,10 @@ packages:
     dependency: transitive
     description:
       name: gg_test
-      sha256: "47548ab67a8d8c00a92eb2be0b2cf34959ff6db9f289e59aa4dfd6994b28c75e"
+      sha256: "20f15200ddf610fb2c7cae26686b3ec98b1e63a6a76c1c370d3c7e36791c86c2"
       url: "https://pub.dev"
     source: hosted
-    version: "2.4.0"
+    version: "2.4.1"
   gg_version:
     dependency: transitive
     description:
