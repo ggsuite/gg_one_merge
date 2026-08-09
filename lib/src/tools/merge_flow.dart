@@ -201,9 +201,10 @@ class MergeFlow {
   /// commits the removal onto the current branch, so the marker never
   /// reaches the main branch. A no-op when the marker is absent.
   ///
-  /// Public because `do publish` calls it too — the registry upload happens
-  /// BEFORE the merge, so waiting for the merge-time removal would ship the
-  /// marker to pub.dev/npm inside the published package.
+  /// Public because `do publish` calls it too — right at the start, before
+  /// the version bump: the marker must neither ride into the release
+  /// commits the merge puts on the main branch nor ship to pub.dev/npm
+  /// inside the package the registry upload publishes afterwards.
   ///
   /// The hidden `.gg/.ticket.json` of the days before the files inside `.gg`
   /// were unhidden is removed alongside it: a branch created back then still

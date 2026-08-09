@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Documentation: `removeTicketJson` is called by `do publish` right at the
+start, before the version bump — the marker must neither ride into the
+release commits the merge puts on the main branch nor ship inside the
+package the registry upload publishes afterwards (the publish flow now
+merges before it uploads).
+- Merge in main before publishing
+
 ## 2.1.0 - 2026-08-09
 
 ### Changed
