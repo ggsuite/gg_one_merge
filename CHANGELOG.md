@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.0 - 2026-08-09
+
+### Changed
+
+- Allow to publish hybrid packages
+
 ## 2.0.0 - 2026-08-08
 
 ## 1.0.2 - 2026-08-07

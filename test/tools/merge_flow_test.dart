@@ -144,6 +144,7 @@ void main() {
       () => mockGgState.writeSuccess(
         directory: any(named: 'directory'),
         key: any(named: 'key'),
+        ignoreUnstaged: any(named: 'ignoreUnstaged'),
       ),
     ).thenAnswer((_) async {});
   });
@@ -224,7 +225,11 @@ void main() {
           local: false,
           verbose: false,
         ),
-        () => mockGgState.writeSuccess(directory: d, key: 'doCommit'),
+        () => mockGgState.writeSuccess(
+          directory: d,
+          key: 'doCommit',
+          ignoreUnstaged: true,
+        ),
       ]);
     });
 
@@ -737,7 +742,11 @@ void main() {
           runInShell: true,
           workingDirectory: d.path,
         ),
-        () => mockGgState.writeSuccess(directory: d, key: 'doCommit'),
+        () => mockGgState.writeSuccess(
+          directory: d,
+          key: 'doCommit',
+          ignoreUnstaged: true,
+        ),
       ]);
 
       // The local merge path must not run in the pull-request flow.
@@ -789,6 +798,7 @@ void main() {
           () => mockGgState.writeSuccess(
             directory: d,
             key: any(named: 'key'),
+            ignoreUnstaged: any(named: 'ignoreUnstaged'),
           ),
         ).thenAnswer((_) async {});
 
@@ -1018,8 +1028,16 @@ void main() {
       // Both states are written while the feature branch content is still
       // the content the squash merge puts on main.
       verifyInOrder([
-        () => mockGgState.writeSuccess(directory: d, key: 'doCommit'),
-        () => mockGgState.writeSuccess(directory: d, key: 'doPush'),
+        () => mockGgState.writeSuccess(
+          directory: d,
+          key: 'doCommit',
+          ignoreUnstaged: true,
+        ),
+        () => mockGgState.writeSuccess(
+          directory: d,
+          key: 'doPush',
+          ignoreUnstaged: true,
+        ),
         () => mockGgMergeDoMerge.get(
           directory: d,
           ggLog: ggLog,
