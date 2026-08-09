@@ -116,8 +116,29 @@ class MergeFlow {
     // A merge produces a fully-committed, gg-verified HEAD, so it satisfies
     // »gg did commit«. Record that, otherwise every later »gg did commit« —
     // CI, and any repo-level hook that runs it — rejects the merge commit.
-    await _state.writeSuccess(directory: directory, key: 'doCommit');
+    await _recordReleaseState(directory, 'doCommit');
   }
+
+  // ...........................................................................
+  /// Records [key] for the **committed** content of [directory].
+  ///
+  /// `ignoreUnstaged: true` is what makes the recorded hash reproducible after
+  /// the release window closes. [GgState] hashes the working tree *including
+  /// untracked files*, while [_commitPendingChanges] deliberately commits only
+  /// tracked ones (`git add --update`) so no stray build output is swept into
+  /// a release commit. An untracked file that exists for a moment — a
+  /// generated artifact, a tool's scratch file, anything a build/test/publish
+  /// script leaves behind — would therefore be hashed into the state without
+  /// ever being committed, and every later »gg did commit« would fail with
+  /// »Not committed yet« the instant that file is gone again.
+  ///
+  /// Hashing the committed content only is also what these call sites *mean*:
+  /// they state something about the tree that is about to become the default
+  /// branch, and untracked files are by definition not part of it. Real
+  /// uncommitted work still fails the later check, which reads the full
+  /// working tree.
+  Future<void> _recordReleaseState(Directory directory, String key) =>
+      _state.writeSuccess(directory: directory, key: key, ignoreUnstaged: true);
 
   /// Commits pending changes to tracked files on the current (feature) branch
   /// before the merge switches branches. During a release the publish step
@@ -388,8 +409,8 @@ class MergeFlow {
     required GgLog ggLog,
     required bool verbose,
   }) async {
-    await _state.writeSuccess(directory: directory, key: 'doCommit');
-    await _state.writeSuccess(directory: directory, key: 'doPush');
+    await _recordReleaseState(directory, 'doCommit');
+    await _recordReleaseState(directory, 'doPush');
 
     // A no-op when the states were already up to date ("Everything
     // up-to-date"), so this never creates an empty extra round trip.
