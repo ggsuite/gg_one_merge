@@ -218,8 +218,12 @@ class MergeFlow {
       verbose: verbose,
     )).trim();
 
+    // No gg prefix here, even in the fallback: this commit lands on the
+    // default branch, and a »#gg: « subject there would claim it is gg
+    // bookkeeping — the default branch carries releases and tags only. The
+    // multi-repo flow always supplies the user's merge message anyway.
     final commitMessage =
-        message ?? '#gg: Merged $currentBranch into $mainBranchName';
+        message ?? 'Merged $currentBranch into $mainBranchName';
     final squashCommit = (await _runGitCommand(
       directory: directory,
       arguments: ['commit-tree', tree, '-p', mainSha, '-m', commitMessage],

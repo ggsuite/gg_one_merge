@@ -144,7 +144,7 @@ void main() {
           '-p',
           localMainSha,
           '-m',
-          '#gg: Merged $currentBranch into $mainBranchName',
+          'Merged $currentBranch into $mainBranchName',
         ],
         runInShell: true,
         workingDirectory: any(named: 'workingDirectory'),
@@ -252,7 +252,7 @@ void main() {
             '-p',
             originMainSha,
             '-m',
-            '#gg: Merged feature/x into main',
+            'Merged feature/x into main',
           ],
           runInShell: true,
           workingDirectory: d.path,
@@ -715,7 +715,7 @@ void main() {
           '\$ git rev-parse --abbrev-ref HEAD',
           '\$ git rev-parse HEAD:',
           '\$ git commit-tree $treeSha -p $originMainSha '
-              '-m #gg: Merged feature/x into main',
+              '-m Merged feature/x into main',
           '\$ git update-ref refs/heads/main $squashSha $originMainSha',
         ]),
       );
