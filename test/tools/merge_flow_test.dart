@@ -35,6 +35,7 @@ void main() {
   late MockGgState mockGgState;
   late MockMainBranch mockMainBranch;
   late MockGgProcessWrapper mockProcessWrapper;
+  late MockGgSystemCommit mockSystemCommit;
 
   // Fixed shas for the plumbing squash of the checkout-free local merge.
   const originMainSha = '1111111111111111111111111111111111111111';
@@ -144,7 +145,7 @@ void main() {
           '-p',
           localMainSha,
           '-m',
-          '#gg: Merged $currentBranch into $mainBranchName',
+          'Merged $currentBranch into $mainBranchName',
         ],
         runInShell: true,
         workingDirectory: any(named: 'workingDirectory'),
@@ -158,6 +159,33 @@ void main() {
         workingDirectory: any(named: 'workingDirectory'),
       ),
     ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+  }
+
+  /// Stubs the system commit — [ggFiles] and [foreignFiles] describe what it
+  /// found dirty and committed.
+  void stubSystemCommit({
+    List<String> ggFiles = const [],
+    List<String> foreignFiles = const [],
+  }) {
+    when(
+      () => mockSystemCommit.commit(
+        directory: any(named: 'directory'),
+        ggLog: any(named: 'ggLog'),
+        message: any(named: 'message'),
+        paths: any(named: 'paths'),
+        includeUntracked: any(named: 'includeUntracked'),
+        ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+        userCommitMessage: any(named: 'userCommitMessage'),
+        stateKey: any(named: 'stateKey'),
+      ),
+    ).thenAnswer(
+      (_) async => GgSystemCommitResult(
+        userCommitCreated: foreignFiles.isNotEmpty,
+        systemCommitCreated: ggFiles.isNotEmpty,
+        ggOwnedPaths: ggFiles,
+        foreignPaths: foreignFiles,
+      ),
+    );
   }
 
   setUp(() async {
@@ -177,6 +205,7 @@ void main() {
     mockGgState = MockGgState();
     mockMainBranch = MockMainBranch();
     mockProcessWrapper = MockGgProcessWrapper();
+    mockSystemCommit = MockGgSystemCommit();
     mergeFlow = MergeFlow(
       ggLog: ggLog,
       doMerge: mockGgMergeDoMerge,
@@ -184,8 +213,12 @@ void main() {
       canMerge: mockCanMerge,
       state: mockGgState,
       mainBranch: mockMainBranch,
+      systemCommit: mockSystemCommit,
       processWrapper: mockProcessWrapper,
     );
+
+    // Default: nothing pending, so no bookkeeping commit is created.
+    stubSystemCommit();
 
     // Default: the merge pre-conditions are fulfilled.
     when(
@@ -252,7 +285,7 @@ void main() {
             '-p',
             originMainSha,
             '-m',
-            '#gg: Merged feature/x into main',
+            'Merged feature/x into main',
           ],
           runInShell: true,
           workingDirectory: d.path,
@@ -431,73 +464,28 @@ void main() {
       stubGitCommands();
 
       // A formatter / gg run left tracked files dirty after the last commit.
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          ['status', '--porcelain', '--untracked-files=no'],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, ' M pubspec.yaml\n', ''));
-
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          ['add', '--update'],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          [
-            'commit',
-            '-m',
-            '#gg: Commit pending changes before merge '
-                '(e.g. release formatting)',
-          ],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+      stubSystemCommit(ggFiles: ['pubspec.yaml']);
 
       await mergeFlow.get(directory: d, ggLog: ggLog);
 
-      // Staged and committed before the squash commit is built, so the
-      // leftovers are part of the release tree.
-      verifyInOrder([
-        () => mockProcessWrapper.run(
-          'git',
-          ['status', '--porcelain', '--untracked-files=no'],
-          runInShell: true,
-          workingDirectory: d.path,
+      // Committed before the squash commit is built, so the leftovers are
+      // part of the release tree. Untracked files stay out — stray build
+      // output must never be swept in.
+      final call = verify(
+        () => mockSystemCommit.commit(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: captureAny(named: 'message'),
+          includeUntracked: captureAny(named: 'includeUntracked'),
         ),
-        () => mockProcessWrapper.run(
-          'git',
-          ['add', '--update'],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-        () => mockProcessWrapper.run(
-          'git',
-          [
-            'commit',
-            '-m',
-            '#gg: Commit pending changes before merge '
-                '(e.g. release formatting)',
-          ],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-        () => mockProcessWrapper.run(
-          'git',
-          ['rev-parse', 'HEAD:'],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-      ]);
+      )..called(1);
+      expect(
+        call.captured[0],
+        '${ggCommitPrefix}Commit pending changes before merge '
+        '(e.g. release formatting)',
+      );
+      expect(call.captured[1], isFalse);
+
       expect(
         messages,
         contains(
@@ -715,7 +703,7 @@ void main() {
           '\$ git rev-parse --abbrev-ref HEAD',
           '\$ git rev-parse HEAD:',
           '\$ git commit-tree $treeSha -p $originMainSha '
-              '-m #gg: Merged feature/x into main',
+              '-m Merged feature/x into main',
           '\$ git update-ref refs/heads/main $squashSha $originMainSha',
         ]),
       );
@@ -732,14 +720,6 @@ void main() {
         () => mockProcessWrapper.run(
           'git',
           ['rm', '-f', '--ignore-unmatch', '.gg/ticket.json'],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          ['commit', '-m', '#gg: Remove .gg/ticket.json'],
           runInShell: true,
           workingDirectory: any(named: 'workingDirectory'),
         ),
@@ -766,14 +746,15 @@ void main() {
           workingDirectory: d.path,
         ),
       ).called(1);
-      verify(
-        () => mockProcessWrapper.run(
-          'git',
-          ['commit', '-m', '#gg: Remove .gg/ticket.json'],
-          runInShell: true,
-          workingDirectory: d.path,
+      final call = verify(
+        () => mockSystemCommit.commit(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: captureAny(named: 'message'),
+          paths: captureAny(named: 'paths'),
         ),
-      ).called(1);
+      )..called(1);
+      expect(call.captured[0], '${ggCommitPrefix}Remove .gg/ticket.json');
       expect(messages, contains('Removed .gg/ticket.json.'));
     });
 
@@ -789,14 +770,6 @@ void main() {
         () => mockProcessWrapper.run(
           'git',
           ['rm', '-f', '--ignore-unmatch', '.gg/.ticket.json'],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          ['commit', '-m', '#gg: Remove .gg/ticket.json'],
           runInShell: true,
           workingDirectory: any(named: 'workingDirectory'),
         ),
@@ -1094,48 +1067,31 @@ void main() {
         'pull request', () async {
       stubGitCommands();
 
-      // The status is checked twice: before the merge (clean) and after the
-      // first push (a »dart run« pre-push hook rewrote pubspec.lock).
-      var statusCalls = 0;
+      // The system commit runs twice: before the merge (nothing pending) and
+      // after the first push (a »dart run« pre-push hook rewrote
+      // pubspec.lock).
+      var commitCalls = 0;
       when(
-        () => mockProcessWrapper.run(
-          'git',
-          ['status', '--porcelain', '--untracked-files=no'],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
+        () => mockSystemCommit.commit(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: any(named: 'message'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
       ).thenAnswer((_) async {
-        statusCalls++;
-        return ProcessResult(
-          0,
-          0,
-          statusCalls == 2 ? ' M pubspec.lock\n' : '',
-          '',
+        commitCalls++;
+        final drift = commitCalls == 2;
+        return GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: drift,
+          ggOwnedPaths: drift ? ['pubspec.lock'] : const [],
+          foreignPaths: const [],
         );
       });
-
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          ['add', '--update'],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          [
-            'commit',
-            '-m',
-            '#gg: Commit pending changes before merge '
-                '(e.g. release formatting)',
-          ],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
 
       when(
         () => mockProcessWrapper.run(
@@ -1169,19 +1125,7 @@ void main() {
 
       // The drift commit was created and pushed with a second push; the
       // third push carries the recorded release state into the PR.
-      verify(
-        () => mockProcessWrapper.run(
-          'git',
-          [
-            'commit',
-            '-m',
-            '#gg: Commit pending changes before merge '
-                '(e.g. release formatting)',
-          ],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-      ).called(1);
+      expect(commitCalls, 2);
       verify(
         () => mockProcessWrapper.run(
           'git',
@@ -1190,7 +1134,6 @@ void main() {
           workingDirectory: d.path,
         ),
       ).called(3);
-      expect(statusCalls, 2);
     });
 
     test('records doCommit and doPush before creating the pull request, '

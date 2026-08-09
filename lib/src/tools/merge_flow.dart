@@ -32,12 +32,14 @@ class MergeFlow {
     gg_merge.WaitForMerge? waitForMerge,
     gg_merge.CanMerge? canMerge,
     gg_publish.MainBranch? mainBranch,
+    GgSystemCommit? systemCommit,
     GgProcessWrapper processWrapper = const GgProcessWrapper(),
   }) : _state = state ?? GgState(ggLog: ggLog),
        _doMerge = doMerge ?? gg_merge.DoMerge(ggLog: ggLog),
        _waitForMerge = waitForMerge ?? gg_merge.WaitForMerge(ggLog: ggLog),
        _canMerge = canMerge ?? gg_merge.CanMerge(ggLog: ggLog),
        _mainBranch = mainBranch ?? gg_publish.MainBranch(ggLog: ggLog),
+       _systemCommit = systemCommit ?? GgSystemCommit(ggLog: ggLog),
        _processWrapper = processWrapper;
 
   /// The log function
@@ -48,6 +50,7 @@ class MergeFlow {
   final gg_merge.WaitForMerge _waitForMerge;
   final gg_merge.CanMerge _canMerge;
   final gg_publish.MainBranch _mainBranch;
+  final GgSystemCommit _systemCommit;
   final GgProcessWrapper _processWrapper;
 
   /// Merges the current feature branch into the default branch — locally or
@@ -218,8 +221,12 @@ class MergeFlow {
       verbose: verbose,
     )).trim();
 
+    // No gg prefix here, even in the fallback: this commit lands on the
+    // default branch, and a »#gg: « subject there would claim it is gg
+    // bookkeeping — the default branch carries releases and tags only. The
+    // multi-repo flow always supplies the user's merge message anyway.
     final commitMessage =
-        message ?? '#gg: Merged $currentBranch into $mainBranchName';
+        message ?? 'Merged $currentBranch into $mainBranchName';
     final squashCommit = (await _runGitCommand(
       directory: directory,
       arguments: ['commit-tree', tree, '-p', mainSha, '-m', commitMessage],
@@ -281,45 +288,31 @@ class MergeFlow {
   /// `git checkout <main>` abort with "local changes would be overwritten by
   /// checkout". These are post-check release artifacts, so committing them
   /// keeps the merge robust instead of failing mid-publish. Untracked files
-  /// are deliberately excluded (`--untracked-files=no` / `git add --update`)
-  /// so stray build output is never swept into the commit. Returns whether a
-  /// commit was created.
+  /// are deliberately excluded so stray build output is never swept in.
+  ///
+  /// Whatever is dirty here that gg does *not* own is the user's, and it gets
+  /// its own commit without the gg prefix — a release artifact and a
+  /// half-finished edit must not end up indistinguishable in one commit.
+  /// Returns whether anything was committed.
   Future<bool> _commitPendingChanges({
     required Directory directory,
     required GgLog ggLog,
     required bool verbose,
   }) async {
-    final status = await _runGitCommand(
+    // Always logging: when the split saves pending *user* changes into their
+    // own commit, the user has to learn about it — verbose or not.
+    final result = await _systemCommit.commit(
       directory: directory,
-      arguments: const ['status', '--porcelain', '--untracked-files=no'],
-      actionDescription: 'check for pending changes before merge',
       ggLog: ggLog,
-      verbose: verbose,
+      message:
+          '${ggCommitPrefix}Commit pending changes before merge '
+          '(e.g. release formatting)',
+      includeUntracked: false,
     );
 
-    if (status.trim().isEmpty) {
+    if (!result.systemCommitCreated && !result.userCommitCreated) {
       return false;
     }
-
-    await _runGitCommand(
-      directory: directory,
-      arguments: const ['add', '--update'],
-      actionDescription: 'stage pending changes before merge',
-      ggLog: ggLog,
-      verbose: verbose,
-    );
-
-    await _runGitCommand(
-      directory: directory,
-      arguments: const [
-        'commit',
-        '-m',
-        '#gg: Commit pending changes before merge (e.g. release formatting)',
-      ],
-      actionDescription: 'commit pending changes before merge',
-      ggLog: ggLog,
-      verbose: verbose,
-    );
 
     ggLog(
       cDetail(
@@ -376,12 +369,13 @@ class MergeFlow {
       }
     }
 
-    await _runGitCommand(
+    // The removal already sits in the index after »git rm«; the pathspec
+    // keeps anything else that turned dirty meanwhile out of this commit.
+    await _systemCommit.commit(
       directory: directory,
-      arguments: const ['commit', '-m', '#gg: Remove .gg/ticket.json'],
-      actionDescription: 'commit removal of .gg/ticket.json',
       ggLog: ggLog,
-      verbose: verbose,
+      message: '${ggCommitPrefix}Remove .gg/ticket.json',
+      paths: markers.map((f) => '.gg/${p.basename(f.path)}').toList(),
     );
     ggLog(darkGray('Removed .gg/ticket.json.'));
   }
