@@ -7,7 +7,6 @@
 import 'dart:io';
 
 import 'package:gg_git/gg_git_test_helpers.dart';
-import 'package:gg_git/gg_git.dart' show ggCommitPrefix;
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_merge/gg_merge.dart' as gg_merge;
 import 'package:gg_one_merge/gg_one_merge.dart';

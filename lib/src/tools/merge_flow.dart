@@ -8,7 +8,6 @@ import 'package:gg_one_core/gg_one_core.dart';
 import 'dart:io';
 
 import 'package:gg_console_colors/gg_console_colors.dart';
-import 'package:gg_git/gg_git.dart' show ggCommitPrefix;
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_merge/gg_merge.dart' as gg_merge;
 import 'package:gg_one_merge/src/tools/lock_files.dart';
