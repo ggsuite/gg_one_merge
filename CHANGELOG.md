@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `CreatePullRequest.get` takes a `body` — the pull-request description
+
 ## 2.3.2 - 2026-08-10
 
 ### Fixed
