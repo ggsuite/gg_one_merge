@@ -830,6 +830,7 @@ void main() {
           directory: d,
           ggLog: ggLog,
           branch: any(named: 'branch'),
+          autoMerge: any(named: 'autoMerge'),
         ),
       ).thenAnswer((_) async => true);
 
@@ -888,6 +889,7 @@ void main() {
           directory: d,
           ggLog: ggLog,
           branch: any(named: 'branch'),
+          autoMerge: any(named: 'autoMerge'),
         ),
         // Fetch again (the provider merged after the last fetch), then
         // fast-forward the local main REF — no checkout.
@@ -960,6 +962,7 @@ void main() {
             directory: d,
             ggLog: ggLog,
             branch: any(named: 'branch'),
+            autoMerge: any(named: 'autoMerge'),
           ),
         ).thenAnswer((_) async => true);
 
@@ -1118,6 +1121,7 @@ void main() {
           directory: d,
           ggLog: ggLog,
           branch: any(named: 'branch'),
+          autoMerge: any(named: 'autoMerge'),
         ),
       ).thenAnswer((_) async => true);
 
@@ -1166,6 +1170,7 @@ void main() {
           directory: d,
           ggLog: ggLog,
           branch: any(named: 'branch'),
+          autoMerge: any(named: 'autoMerge'),
         ),
       ).thenAnswer((_) async => true);
 
@@ -1224,6 +1229,7 @@ void main() {
           directory: d,
           ggLog: ggLog,
           branch: any(named: 'branch'),
+          autoMerge: any(named: 'autoMerge'),
         ),
       ).thenAnswer((_) async => true);
 
