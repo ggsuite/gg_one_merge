@@ -39,8 +39,9 @@ class CreatePullRequest {
   final GgProcessWrapper _processWrapper;
 
   /// Opens — or reuses — the pull request of the branch checked out in
-  /// [directory] and returns its web url. [message] becomes title and body of
-  /// a newly created pull request; an existing one keeps the ones it has.
+  /// [directory] and returns its web url. [message] becomes the title of a
+  /// newly created pull request and [body] its description (the title when
+  /// no body is given); an existing pull request keeps the ones it has.
   ///
   /// Returns null when `origin` is neither GitHub nor Azure DevOps: those are
   /// the providers gg can open a pull request on. That is no error — the
@@ -52,6 +53,7 @@ class CreatePullRequest {
     required Directory directory,
     required GgLog ggLog,
     String? message,
+    String? body,
   }) async {
     final remoteUrl = await gg_merge.readOriginUrl(
       directory: directory,
@@ -91,6 +93,7 @@ class CreatePullRequest {
       // Never auto-merge here: this pull request is opened for the review.
       automerge: false,
       message: message,
+      body: body,
     );
 
     final url = await _pullRequestUrl(
