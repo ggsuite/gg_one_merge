@@ -31,13 +31,21 @@ void main() {
   late MergeFlow mergeFlow;
   late MockGgMergeDoMerge mockGgMergeDoMerge;
   late MockGgMergeWaitForMerge mockWaitForMerge;
+  late gg_merge.MockCanMerge mockCanMerge;
   late MockGgState mockGgState;
   late MockMainBranch mockMainBranch;
   late MockGgProcessWrapper mockProcessWrapper;
+  late MockGgSystemCommit mockSystemCommit;
+
+  // Fixed shas for the plumbing squash of the checkout-free local merge.
+  const originMainSha = '1111111111111111111111111111111111111111';
+  const treeSha = '2222222222222222222222222222222222222222';
+  const squashSha = '3333333333333333333333333333333333333333';
 
   void stubGitCommands({
     String mainBranchName = 'main',
     String currentBranch = 'feature/x',
+    String localMainSha = originMainSha,
   }) {
     when(
       () => mockMainBranch.get(
@@ -58,34 +66,7 @@ void main() {
     when(
       () => mockProcessWrapper.run(
         'git',
-        ['checkout', mainBranchName],
-        runInShell: true,
-        workingDirectory: any(named: 'workingDirectory'),
-      ),
-    ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-
-    when(
-      () => mockProcessWrapper.run(
-        'git',
-        ['checkout', currentBranch],
-        runInShell: true,
-        workingDirectory: any(named: 'workingDirectory'),
-      ),
-    ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-
-    when(
-      () => mockProcessWrapper.run(
-        'git',
         ['fetch'],
-        runInShell: true,
-        workingDirectory: any(named: 'workingDirectory'),
-      ),
-    ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-
-    when(
-      () => mockProcessWrapper.run(
-        'git',
-        ['pull', '--ff-only'],
         runInShell: true,
         workingDirectory: any(named: 'workingDirectory'),
       ),
@@ -112,6 +93,99 @@ void main() {
     ).thenAnswer(
       (_) async => ProcessResult(0, 0, 'lib/src/changed.dart\n', ''),
     );
+
+    // The refs of the checkout-free sync: origin/<main> and the local
+    // <main> point at the same commit by default, so the sync is a no-op.
+    when(
+      () => mockProcessWrapper.run(
+        'git',
+        [
+          'rev-parse',
+          '--verify',
+          '--quiet',
+          'refs/remotes/origin/$mainBranchName',
+        ],
+        runInShell: true,
+        workingDirectory: any(named: 'workingDirectory'),
+      ),
+    ).thenAnswer((_) async => ProcessResult(0, 0, '$originMainSha\n', ''));
+    when(
+      () => mockProcessWrapper.run(
+        'git',
+        ['rev-parse', '--verify', '--quiet', 'refs/heads/$mainBranchName'],
+        runInShell: true,
+        workingDirectory: any(named: 'workingDirectory'),
+      ),
+    ).thenAnswer((_) async => ProcessResult(0, 0, '$localMainSha\n', ''));
+
+    // The plumbing squash: main is contained in the feature branch, the
+    // feature tree becomes the squash commit, the main ref moves onto it.
+    when(
+      () => mockProcessWrapper.run(
+        'git',
+        ['merge-base', '--is-ancestor', localMainSha, 'HEAD'],
+        runInShell: true,
+        workingDirectory: any(named: 'workingDirectory'),
+      ),
+    ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+    when(
+      () => mockProcessWrapper.run(
+        'git',
+        ['rev-parse', 'HEAD:'],
+        runInShell: true,
+        workingDirectory: any(named: 'workingDirectory'),
+      ),
+    ).thenAnswer((_) async => ProcessResult(0, 0, '$treeSha\n', ''));
+    when(
+      () => mockProcessWrapper.run(
+        'git',
+        [
+          'commit-tree',
+          treeSha,
+          '-p',
+          localMainSha,
+          '-m',
+          'Merged $currentBranch into $mainBranchName',
+        ],
+        runInShell: true,
+        workingDirectory: any(named: 'workingDirectory'),
+      ),
+    ).thenAnswer((_) async => ProcessResult(0, 0, '$squashSha\n', ''));
+    when(
+      () => mockProcessWrapper.run(
+        'git',
+        ['update-ref', 'refs/heads/$mainBranchName', squashSha, localMainSha],
+        runInShell: true,
+        workingDirectory: any(named: 'workingDirectory'),
+      ),
+    ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+  }
+
+  /// Stubs the system commit — [ggFiles] and [foreignFiles] describe what it
+  /// found dirty and committed.
+  void stubSystemCommit({
+    List<String> ggFiles = const [],
+    List<String> foreignFiles = const [],
+  }) {
+    when(
+      () => mockSystemCommit.commit(
+        directory: any(named: 'directory'),
+        ggLog: any(named: 'ggLog'),
+        message: any(named: 'message'),
+        paths: any(named: 'paths'),
+        includeUntracked: any(named: 'includeUntracked'),
+        ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+        userCommitMessage: any(named: 'userCommitMessage'),
+        stateKey: any(named: 'stateKey'),
+      ),
+    ).thenAnswer(
+      (_) async => GgSystemCommitResult(
+        userCommitCreated: foreignFiles.isNotEmpty,
+        systemCommitCreated: ggFiles.isNotEmpty,
+        ggOwnedPaths: ggFiles,
+        foreignPaths: foreignFiles,
+      ),
+    );
   }
 
   setUp(() async {
@@ -127,23 +201,39 @@ void main() {
     );
     mockGgMergeDoMerge = MockGgMergeDoMerge();
     mockWaitForMerge = MockGgMergeWaitForMerge();
+    mockCanMerge = gg_merge.MockCanMerge();
     mockGgState = MockGgState();
     mockMainBranch = MockMainBranch();
     mockProcessWrapper = MockGgProcessWrapper();
+    mockSystemCommit = MockGgSystemCommit();
     mergeFlow = MergeFlow(
       ggLog: ggLog,
       doMerge: mockGgMergeDoMerge,
       waitForMerge: mockWaitForMerge,
+      canMerge: mockCanMerge,
       state: mockGgState,
       mainBranch: mockMainBranch,
+      systemCommit: mockSystemCommit,
       processWrapper: mockProcessWrapper,
     );
+
+    // Default: nothing pending, so no bookkeeping commit is created.
+    stubSystemCommit();
+
+    // Default: the merge pre-conditions are fulfilled.
+    when(
+      () => mockCanMerge.get(
+        directory: any(named: 'directory'),
+        ggLog: any(named: 'ggLog'),
+      ),
+    ).thenAnswer((_) async => true);
 
     // Default: any state write succeeds (doCommit).
     when(
       () => mockGgState.writeSuccess(
         directory: any(named: 'directory'),
         key: any(named: 'key'),
+        ignoreUnstaged: any(named: 'ignoreUnstaged'),
       ),
     ).thenAnswer((_) async {});
   });
@@ -164,6 +254,7 @@ void main() {
           ggLog: ggLog,
           state: mockGgState,
           doMerge: mockGgMergeDoMerge,
+          canMerge: mockCanMerge,
           mainBranch: mockMainBranch,
           processWrapper: mockProcessWrapper,
         );
@@ -171,93 +262,121 @@ void main() {
       });
     });
 
-    test('should fetch and pull main, then call gg_merge DoMerge', () async {
+    test('squash-merges locally without checking anything out', () async {
       stubGitCommands();
-
-      when(
-        () => mockGgMergeDoMerge.get(
-          directory: d,
-          ggLog: ggLog,
-          automerge: false,
-          local: false,
-          verbose: false,
-        ),
-      ).thenAnswer((_) async => true);
 
       await mergeFlow.get(directory: d, ggLog: ggLog);
 
       verifyInOrder([
+        // The gate of the pull-request path runs here too.
+        () => mockCanMerge.get(directory: d, ggLog: ggLog),
+        // The squash commit is built with plumbing on the feature branch …
         () => mockProcessWrapper.run(
           'git',
-          ['rev-parse', '--abbrev-ref', 'HEAD'],
+          ['rev-parse', 'HEAD:'],
           runInShell: true,
           workingDirectory: d.path,
         ),
+        () => mockProcessWrapper.run(
+          'git',
+          [
+            'commit-tree',
+            treeSha,
+            '-p',
+            originMainSha,
+            '-m',
+            'Merged feature/x into main',
+          ],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+        // … and the main ref is moved onto it, guarded by its old tip.
+        () => mockProcessWrapper.run(
+          'git',
+          ['update-ref', 'refs/heads/main', squashSha, originMainSha],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+        () => mockGgState.writeSuccess(
+          directory: d,
+          key: 'doCommit',
+          ignoreUnstaged: true,
+        ),
+      ]);
+
+      // Neither branch is ever checked out — no editor tooling can descend
+      // on an old worktree state — and gg_merge's DoMerge (whose local
+      // merge checks main out) is not involved at all.
+      verifyNever(
         () => mockProcessWrapper.run(
           'git',
           ['checkout', 'main'],
-          runInShell: true,
-          workingDirectory: d.path,
+          runInShell: any(named: 'runInShell'),
+          workingDirectory: any(named: 'workingDirectory'),
         ),
-        () => mockProcessWrapper.run(
-          'git',
-          ['fetch'],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-        () => mockProcessWrapper.run(
-          'git',
-          ['pull', '--ff-only'],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
+      );
+      verifyNever(
         () => mockProcessWrapper.run(
           'git',
           ['checkout', 'feature/x'],
-          runInShell: true,
-          workingDirectory: d.path,
+          runInShell: any(named: 'runInShell'),
+          workingDirectory: any(named: 'workingDirectory'),
         ),
+      );
+      verifyNever(
         () => mockGgMergeDoMerge.get(
-          directory: d,
-          ggLog: ggLog,
-          automerge: false,
-          local: false,
-          verbose: false,
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          automerge: any(named: 'automerge'),
+          local: any(named: 'local'),
+          message: any(named: 'message'),
+          verbose: any(named: 'verbose'),
         ),
-        () => mockGgState.writeSuccess(directory: d, key: 'doCommit'),
-      ]);
+      );
+      expect(
+        messages.any((m) => m.contains('Squash-merged feature/x into main')),
+        isTrue,
+      );
     });
 
     test('resets a diverged main when only gg bookkeeping differs', () async {
+      const divergedSha = '4444444444444444444444444444444444444444';
       stubGitCommands();
 
-      when(
-        () => mockGgMergeDoMerge.get(
-          directory: d,
-          ggLog: ggLog,
-          automerge: false,
-          local: false,
-          verbose: false,
-        ),
-      ).thenAnswer((_) async => true);
-
-      // The fast-forward pull fails: main and origin/main have diverged.
+      // The local main ref diverged from origin/main. After the forced move
+      // the ref is read again, so the stub answers with the diverged sha
+      // first and with origin/main afterwards.
+      var localMainReads = 0;
       when(
         () => mockProcessWrapper.run(
           'git',
-          ['pull', '--ff-only'],
+          ['rev-parse', '--verify', '--quiet', 'refs/heads/main'],
           runInShell: true,
           workingDirectory: d.path,
         ),
-      ).thenAnswer(
-        (_) async => ProcessResult(1, 1, '', 'You have divergent branches ...'),
-      );
+      ).thenAnswer((_) async {
+        localMainReads++;
+        return ProcessResult(
+          0,
+          0,
+          localMainReads == 1 ? '$divergedSha\n' : '$originMainSha\n',
+          '',
+        );
+      });
+      when(
+        () => mockProcessWrapper.run(
+          'git',
+          ['merge-base', '--is-ancestor', divergedSha, originMainSha],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 1, '', ''));
 
       // The local-only commits touch gg bookkeeping and lock files only.
       when(
         () => mockProcessWrapper.run(
           'git',
-          ['log', 'origin/main..HEAD', '--name-only', '--pretty=format:'],
+          ['log', 'origin/main..main', '--name-only', '--pretty=format:'],
           runInShell: true,
           workingDirectory: d.path,
         ),
@@ -268,7 +387,7 @@ void main() {
       when(
         () => mockProcessWrapper.run(
           'git',
-          ['reset', '--hard', 'origin/main'],
+          ['branch', '-f', 'main', originMainSha],
           runInShell: true,
           workingDirectory: d.path,
         ),
@@ -276,10 +395,11 @@ void main() {
 
       await mergeFlow.get(directory: d, ggLog: ggLog);
 
+      // The ref was force-moved — no checkout, no reset of any worktree.
       verify(
         () => mockProcessWrapper.run(
           'git',
-          ['reset', '--hard', 'origin/main'],
+          ['branch', '-f', 'main', originMainSha],
           runInShell: true,
           workingDirectory: d.path,
         ),
@@ -288,24 +408,23 @@ void main() {
     });
 
     test('throws when main diverged with real local commits', () async {
-      stubGitCommands();
+      const divergedSha = '4444444444444444444444444444444444444444';
+      stubGitCommands(localMainSha: divergedSha);
 
       when(
         () => mockProcessWrapper.run(
           'git',
-          ['pull', '--ff-only'],
+          ['merge-base', '--is-ancestor', divergedSha, originMainSha],
           runInShell: true,
           workingDirectory: d.path,
         ),
-      ).thenAnswer(
-        (_) async => ProcessResult(1, 1, '', 'You have divergent branches ...'),
-      );
+      ).thenAnswer((_) async => ProcessResult(0, 1, '', ''));
 
       // The local-only commits touch real source files.
       when(
         () => mockProcessWrapper.run(
           'git',
-          ['log', 'origin/main..HEAD', '--name-only', '--pretty=format:'],
+          ['log', 'origin/main..main', '--name-only', '--pretty=format:'],
           runInShell: true,
           workingDirectory: d.path,
         ),
@@ -322,11 +441,19 @@ void main() {
         ),
       );
 
-      // Real commits are never discarded.
+      // Real commits are never discarded, and no squash commit is created.
       verifyNever(
         () => mockProcessWrapper.run(
           'git',
-          ['reset', '--hard', 'origin/main'],
+          ['branch', '-f', 'main', originMainSha],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+      );
+      verifyNever(
+        () => mockProcessWrapper.run(
+          'git',
+          ['update-ref', 'refs/heads/main', squashSha, divergedSha],
           runInShell: true,
           workingDirectory: d.path,
         ),
@@ -337,82 +464,28 @@ void main() {
       stubGitCommands();
 
       // A formatter / gg run left tracked files dirty after the last commit.
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          ['status', '--porcelain', '--untracked-files=no'],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, ' M pubspec.yaml\n', ''));
-
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          ['add', '--update'],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          [
-            'commit',
-            '-m',
-            '#gg: Commit pending changes before merge '
-                '(e.g. release formatting)',
-          ],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-
-      when(
-        () => mockGgMergeDoMerge.get(
-          directory: d,
-          ggLog: ggLog,
-          automerge: false,
-          local: false,
-          verbose: false,
-        ),
-      ).thenAnswer((_) async => true);
+      stubSystemCommit(ggFiles: ['pubspec.yaml']);
 
       await mergeFlow.get(directory: d, ggLog: ggLog);
 
-      // Staged and committed before the branch switch.
-      verifyInOrder([
-        () => mockProcessWrapper.run(
-          'git',
-          ['status', '--porcelain', '--untracked-files=no'],
-          runInShell: true,
-          workingDirectory: d.path,
+      // Committed before the squash commit is built, so the leftovers are
+      // part of the release tree. Untracked files stay out — stray build
+      // output must never be swept in.
+      final call = verify(
+        () => mockSystemCommit.commit(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: captureAny(named: 'message'),
+          includeUntracked: captureAny(named: 'includeUntracked'),
         ),
-        () => mockProcessWrapper.run(
-          'git',
-          ['add', '--update'],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-        () => mockProcessWrapper.run(
-          'git',
-          [
-            'commit',
-            '-m',
-            '#gg: Commit pending changes before merge '
-                '(e.g. release formatting)',
-          ],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-        () => mockProcessWrapper.run(
-          'git',
-          ['checkout', 'main'],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-      ]);
+      )..called(1);
+      expect(
+        call.captured[0],
+        '${ggCommitPrefix}Commit pending changes before merge '
+        '(e.g. release formatting)',
+      );
+      expect(call.captured[1], isFalse);
+
       expect(
         messages,
         contains(
@@ -422,58 +495,8 @@ void main() {
       );
     });
 
-    test('should not checkout when already on main branch', () async {
+    test('throws when HEAD is already on the main branch', () async {
       stubGitCommands(currentBranch: 'main');
-
-      when(
-        () => mockGgMergeDoMerge.get(
-          directory: d,
-          ggLog: ggLog,
-          automerge: false,
-          local: false,
-          verbose: false,
-        ),
-      ).thenAnswer((_) async => true);
-
-      await mergeFlow.get(directory: d, ggLog: ggLog);
-
-      verifyNever(
-        () => mockProcessWrapper.run(
-          'git',
-          ['checkout', 'main'],
-          runInShell: any(named: 'runInShell'),
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      );
-      verify(
-        () => mockProcessWrapper.run(
-          'git',
-          ['fetch'],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-      ).called(1);
-      verify(
-        () => mockProcessWrapper.run(
-          'git',
-          ['pull', '--ff-only'],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-      ).called(1);
-    });
-
-    test('should restore branch when fetch fails', () async {
-      stubGitCommands();
-
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          ['fetch'],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 1, '', 'fetch failed'));
 
       await expectLater(
         mergeFlow.get(directory: d, ggLog: ggLog),
@@ -481,26 +504,190 @@ void main() {
           isA<Exception>().having(
             (e) => rmControls(e.toString()),
             'message',
-            contains('Failed to fetch on main: fetch failed'),
+            contains('Already on main branch; nothing to merge.'),
           ),
         ),
       );
 
+      // Nothing was merged or moved.
+      verifyNever(
+        () => mockProcessWrapper.run(
+          'git',
+          ['rev-parse', 'HEAD:'],
+          runInShell: any(named: 'runInShell'),
+          workingDirectory: any(named: 'workingDirectory'),
+        ),
+      );
+    });
+
+    test('leaves the local main ref alone when origin has no main', () async {
+      stubGitCommands();
+
+      // No remote main — e.g. a repository whose default branch was never
+      // pushed. The local ref stays where it is and the squash proceeds.
+      when(
+        () => mockProcessWrapper.run(
+          'git',
+          ['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/main'],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 1, '', ''));
+
+      await mergeFlow.get(directory: d, ggLog: ggLog);
+
+      verifyNever(
+        () => mockProcessWrapper.run(
+          'git',
+          ['branch', '-f', 'main', originMainSha],
+          runInShell: any(named: 'runInShell'),
+          workingDirectory: any(named: 'workingDirectory'),
+        ),
+      );
       verify(
         () => mockProcessWrapper.run(
           'git',
-          ['checkout', 'feature/x'],
+          ['update-ref', 'refs/heads/main', squashSha, originMainSha],
           runInShell: true,
           workingDirectory: d.path,
         ),
       ).called(1);
+    });
+
+    test('creates the local main ref from origin when it is missing', () async {
+      stubGitCommands();
+
+      // The local main ref does not exist yet; after the sync created it,
+      // the ref is read again and answers with origin/main.
+      var localMainReads = 0;
+      when(
+        () => mockProcessWrapper.run(
+          'git',
+          ['rev-parse', '--verify', '--quiet', 'refs/heads/main'],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+      ).thenAnswer((_) async {
+        localMainReads++;
+        return localMainReads == 1
+            ? ProcessResult(0, 1, '', '')
+            : ProcessResult(0, 0, '$originMainSha\n', '');
+      });
+      when(
+        () => mockProcessWrapper.run(
+          'git',
+          ['branch', '-f', 'main', originMainSha],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+
+      await mergeFlow.get(directory: d, ggLog: ggLog);
+
+      verify(
+        () => mockProcessWrapper.run(
+          'git',
+          ['branch', '-f', 'main', originMainSha],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+      ).called(1);
+    });
+
+    test('throws when there is no main branch at all', () async {
+      stubGitCommands();
+
+      // Neither a remote nor a local main exists — nothing to merge into.
+      when(
+        () => mockProcessWrapper.run(
+          'git',
+          ['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/main'],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 1, '', ''));
+      when(
+        () => mockProcessWrapper.run(
+          'git',
+          ['rev-parse', '--verify', '--quiet', 'refs/heads/main'],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 1, '', ''));
+
+      await expectLater(
+        mergeFlow.get(directory: d, ggLog: ggLog),
+        throwsA(
+          isA<Exception>().having(
+            (e) => rmControls(e.toString()),
+            'message',
+            contains('There is no main branch to merge into.'),
+          ),
+        ),
+      );
+    });
+
+    test('throws when main is not contained in the feature branch', () async {
+      stubGitCommands();
+
+      // The belt-and-braces check behind CanMerge: the plumbing squash would
+      // silently drop main's extra content, so it must refuse.
+      when(
+        () => mockProcessWrapper.run(
+          'git',
+          ['merge-base', '--is-ancestor', originMainSha, 'HEAD'],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 1, '', ''));
+
+      await expectLater(
+        mergeFlow.get(directory: d, ggLog: ggLog),
+        throwsA(
+          isA<Exception>().having(
+            (e) => rmControls(e.toString()),
+            'message',
+            contains('main contains commits the feature branch does not'),
+          ),
+        ),
+      );
+
       verifyNever(
-        () => mockGgMergeDoMerge.get(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-          automerge: any(named: 'automerge'),
-          local: any(named: 'local'),
-          verbose: any(named: 'verbose'),
+        () => mockProcessWrapper.run(
+          'git',
+          ['rev-parse', 'HEAD:'],
+          runInShell: any(named: 'runInShell'),
+          workingDirectory: any(named: 'workingDirectory'),
+        ),
+      );
+    });
+
+    test('surfaces a failing git command with its stderr', () async {
+      stubGitCommands();
+
+      // A concurrent move of the main ref makes the guarded update-ref fail.
+      when(
+        () => mockProcessWrapper.run(
+          'git',
+          ['update-ref', 'refs/heads/main', squashSha, originMainSha],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+      ).thenAnswer(
+        (_) async => ProcessResult(0, 1, '', 'ref moved concurrently'),
+      );
+
+      await expectLater(
+        mergeFlow.get(directory: d, ggLog: ggLog),
+        throwsA(
+          isA<Exception>().having(
+            (e) => rmControls(e.toString()),
+            'message',
+            allOf(
+              contains('Failed to move main onto the squash commit'),
+              contains('ref moved concurrently'),
+            ),
+          ),
         ),
       );
     });
@@ -508,26 +695,16 @@ void main() {
     test('logs each git command when verbose is true', () async {
       stubGitCommands();
 
-      when(
-        () => mockGgMergeDoMerge.get(
-          directory: d,
-          ggLog: ggLog,
-          automerge: false,
-          local: false,
-          verbose: true,
-        ),
-      ).thenAnswer((_) async => true);
-
       await mergeFlow.get(directory: d, ggLog: ggLog, verbose: true);
 
       expect(
         messages,
         containsAll(<String>[
           '\$ git rev-parse --abbrev-ref HEAD',
-          '\$ git checkout main',
-          '\$ git fetch',
-          '\$ git pull --ff-only',
-          '\$ git checkout feature/x',
+          '\$ git rev-parse HEAD:',
+          '\$ git commit-tree $treeSha -p $originMainSha '
+              '-m Merged feature/x into main',
+          '\$ git update-ref refs/heads/main $squashSha $originMainSha',
         ]),
       );
     });
@@ -543,14 +720,6 @@ void main() {
         () => mockProcessWrapper.run(
           'git',
           ['rm', '-f', '--ignore-unmatch', '.gg/ticket.json'],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          ['commit', '-m', '#gg: Remove .gg/ticket.json'],
           runInShell: true,
           workingDirectory: any(named: 'workingDirectory'),
         ),
@@ -577,14 +746,15 @@ void main() {
           workingDirectory: d.path,
         ),
       ).called(1);
-      verify(
-        () => mockProcessWrapper.run(
-          'git',
-          ['commit', '-m', '#gg: Remove .gg/ticket.json'],
-          runInShell: true,
-          workingDirectory: d.path,
+      final call = verify(
+        () => mockSystemCommit.commit(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: captureAny(named: 'message'),
+          paths: captureAny(named: 'paths'),
         ),
-      ).called(1);
+      )..called(1);
+      expect(call.captured[0], '${ggCommitPrefix}Remove .gg/ticket.json');
       expect(messages, contains('Removed .gg/ticket.json.'));
     });
 
@@ -600,14 +770,6 @@ void main() {
         () => mockProcessWrapper.run(
           'git',
           ['rm', '-f', '--ignore-unmatch', '.gg/.ticket.json'],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          ['commit', '-m', '#gg: Remove .gg/ticket.json'],
           runInShell: true,
           workingDirectory: any(named: 'workingDirectory'),
         ),
@@ -635,8 +797,9 @@ void main() {
       ).called(1);
     });
 
-    test('merges via a pull request and waits for it, then updates '
-        'main', () async {
+    test('merges via a pull request and waits for it, then fast-forwards '
+        'the local main ref without a checkout', () async {
+      const mergedSha = '5555555555555555555555555555555555555555';
       stubGitCommands();
 
       // Feature-branch push before creating the pull request.
@@ -667,44 +830,47 @@ void main() {
           directory: d,
           ggLog: ggLog,
           branch: any(named: 'branch'),
+          autoMerge: any(named: 'autoMerge'),
         ),
       ).thenAnswer((_) async => true);
+
+      // After the provider merged, origin/main points at the squash commit;
+      // the stale local main is an ancestor of it (fast-forwardable).
+      when(
+        () => mockProcessWrapper.run(
+          'git',
+          ['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/main'],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 0, '$mergedSha\n', ''));
+      when(
+        () => mockProcessWrapper.run(
+          'git',
+          ['merge-base', '--is-ancestor', originMainSha, mergedSha],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+      when(
+        () => mockProcessWrapper.run(
+          'git',
+          ['branch', '-f', 'main', mergedSha],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
 
       await mergeFlow.get(directory: d, ggLog: ggLog, viaPullRequest: true);
 
       verifyInOrder([
-        // _fetchAndPullMain refreshes the remote-tracking refs.
-        () => mockProcessWrapper.run(
-          'git',
-          ['rev-parse', '--abbrev-ref', 'HEAD'],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-        () => mockProcessWrapper.run(
-          'git',
-          ['checkout', 'main'],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
+        // Refresh the remote-tracking refs, then push + create + wait.
         () => mockProcessWrapper.run(
           'git',
           ['fetch'],
           runInShell: true,
           workingDirectory: d.path,
         ),
-        () => mockProcessWrapper.run(
-          'git',
-          ['pull', '--ff-only'],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-        () => mockProcessWrapper.run(
-          'git',
-          ['checkout', 'feature/x'],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-        // Push the feature branch, then create + wait for the PR.
         () => mockProcessWrapper.run(
           'git',
           ['push'],
@@ -723,24 +889,38 @@ void main() {
           directory: d,
           ggLog: ggLog,
           branch: any(named: 'branch'),
+          autoMerge: any(named: 'autoMerge'),
         ),
-        // Bring local main to the merged state.
+        // Fetch again (the provider merged after the last fetch), then
+        // fast-forward the local main REF — no checkout.
+        () => mockProcessWrapper.run(
+          'git',
+          ['fetch'],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+        () => mockProcessWrapper.run(
+          'git',
+          ['branch', '-f', 'main', mergedSha],
+          runInShell: true,
+          workingDirectory: d.path,
+        ),
+        () => mockGgState.writeSuccess(
+          directory: d,
+          key: 'doCommit',
+          ignoreUnstaged: true,
+        ),
+      ]);
+
+      // No branch is ever checked out, and the local merge path never runs.
+      verifyNever(
         () => mockProcessWrapper.run(
           'git',
           ['checkout', 'main'],
-          runInShell: true,
-          workingDirectory: d.path,
+          runInShell: any(named: 'runInShell'),
+          workingDirectory: any(named: 'workingDirectory'),
         ),
-        () => mockProcessWrapper.run(
-          'git',
-          ['pull', '--ff-only'],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-        () => mockGgState.writeSuccess(directory: d, key: 'doCommit'),
-      ]);
-
-      // The local merge path must not run in the pull-request flow.
+      );
       verifyNever(
         () => mockGgMergeDoMerge.get(
           directory: any(named: 'directory'),
@@ -782,6 +962,7 @@ void main() {
             directory: d,
             ggLog: ggLog,
             branch: any(named: 'branch'),
+            autoMerge: any(named: 'autoMerge'),
           ),
         ).thenAnswer((_) async => true);
 
@@ -789,6 +970,7 @@ void main() {
           () => mockGgState.writeSuccess(
             directory: d,
             key: any(named: 'key'),
+            ignoreUnstaged: any(named: 'ignoreUnstaged'),
           ),
         ).thenAnswer((_) async {});
 
@@ -860,15 +1042,23 @@ void main() {
           ),
         );
 
-        // Local main is still brought to the merged state.
-        verify(
+        // The local main ref is still synced to origin — without a checkout.
+        verifyNever(
           () => mockProcessWrapper.run(
             'git',
             ['checkout', 'main'],
+            runInShell: any(named: 'runInShell'),
+            workingDirectory: any(named: 'workingDirectory'),
+          ),
+        );
+        verify(
+          () => mockProcessWrapper.run(
+            'git',
+            ['fetch'],
             runInShell: true,
             workingDirectory: d.path,
           ),
-        ).called(2); // once in _fetchAndPullMain, once for the final checkout
+        ).called(2); // once at the start, once for the final ref sync
         expect(
           messages.any((m) => m.contains('skipping the pull request')),
           isTrue,
@@ -880,49 +1070,31 @@ void main() {
         'pull request', () async {
       stubGitCommands();
 
-      // The status is checked three times: before the merge (clean), after
-      // the first push (a »dart run« pre-push hook rewrote pubspec.lock) and
-      // as safety net after the merge wait (clean again).
-      var statusCalls = 0;
+      // The system commit runs twice: before the merge (nothing pending) and
+      // after the first push (a »dart run« pre-push hook rewrote
+      // pubspec.lock).
+      var commitCalls = 0;
       when(
-        () => mockProcessWrapper.run(
-          'git',
-          ['status', '--porcelain', '--untracked-files=no'],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
+        () => mockSystemCommit.commit(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: any(named: 'message'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
       ).thenAnswer((_) async {
-        statusCalls++;
-        return ProcessResult(
-          0,
-          0,
-          statusCalls == 2 ? ' M pubspec.lock\n' : '',
-          '',
+        commitCalls++;
+        final drift = commitCalls == 2;
+        return GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: drift,
+          ggOwnedPaths: drift ? ['pubspec.lock'] : const [],
+          foreignPaths: const [],
         );
       });
-
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          ['add', '--update'],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-
-      when(
-        () => mockProcessWrapper.run(
-          'git',
-          [
-            'commit',
-            '-m',
-            '#gg: Commit pending changes before merge '
-                '(e.g. release formatting)',
-          ],
-          runInShell: true,
-          workingDirectory: any(named: 'workingDirectory'),
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
 
       when(
         () => mockProcessWrapper.run(
@@ -949,6 +1121,7 @@ void main() {
           directory: d,
           ggLog: ggLog,
           branch: any(named: 'branch'),
+          autoMerge: any(named: 'autoMerge'),
         ),
       ).thenAnswer((_) async => true);
 
@@ -956,19 +1129,7 @@ void main() {
 
       // The drift commit was created and pushed with a second push; the
       // third push carries the recorded release state into the PR.
-      verify(
-        () => mockProcessWrapper.run(
-          'git',
-          [
-            'commit',
-            '-m',
-            '#gg: Commit pending changes before merge '
-                '(e.g. release formatting)',
-          ],
-          runInShell: true,
-          workingDirectory: d.path,
-        ),
-      ).called(1);
+      expect(commitCalls, 2);
       verify(
         () => mockProcessWrapper.run(
           'git',
@@ -977,7 +1138,6 @@ void main() {
           workingDirectory: d.path,
         ),
       ).called(3);
-      expect(statusCalls, 3);
     });
 
     test('records doCommit and doPush before creating the pull request, '
@@ -1010,6 +1170,7 @@ void main() {
           directory: d,
           ggLog: ggLog,
           branch: any(named: 'branch'),
+          autoMerge: any(named: 'autoMerge'),
         ),
       ).thenAnswer((_) async => true);
 
@@ -1018,8 +1179,16 @@ void main() {
       // Both states are written while the feature branch content is still
       // the content the squash merge puts on main.
       verifyInOrder([
-        () => mockGgState.writeSuccess(directory: d, key: 'doCommit'),
-        () => mockGgState.writeSuccess(directory: d, key: 'doPush'),
+        () => mockGgState.writeSuccess(
+          directory: d,
+          key: 'doCommit',
+          ignoreUnstaged: true,
+        ),
+        () => mockGgState.writeSuccess(
+          directory: d,
+          key: 'doPush',
+          ignoreUnstaged: true,
+        ),
         () => mockGgMergeDoMerge.get(
           directory: d,
           ggLog: ggLog,
@@ -1060,6 +1229,7 @@ void main() {
           directory: d,
           ggLog: ggLog,
           branch: any(named: 'branch'),
+          autoMerge: any(named: 'autoMerge'),
         ),
       ).thenAnswer((_) async => true);
 
@@ -1084,36 +1254,118 @@ void main() {
     });
 
     group('get', () {
-      test('forwards the provided parameters to the gg_merge merge', () async {
+      test('passes the merge message into the squash commit', () async {
         stubGitCommands();
 
         when(
-          () => mockGgMergeDoMerge.get(
-            directory: d,
-            ggLog: ggLog,
-            automerge: true,
-            local: true,
-            verbose: false,
+          () => mockProcessWrapper.run(
+            'git',
+            [
+              'commit-tree',
+              treeSha,
+              '-p',
+              originMainSha,
+              '-m',
+              'Release 1.2.3',
+            ],
+            runInShell: true,
+            workingDirectory: d.path,
           ),
-        ).thenAnswer((_) async => true);
+        ).thenAnswer((_) async => ProcessResult(0, 0, '$squashSha\n', ''));
 
         await mergeFlow.get(
           directory: d,
           ggLog: ggLog,
-          automerge: true,
-          local: true,
+          message: 'Release 1.2.3',
         );
 
         verify(
-          () => mockGgMergeDoMerge.get(
-            directory: d,
-            ggLog: ggLog,
-            automerge: true,
-            local: true,
-            verbose: false,
+          () => mockProcessWrapper.run(
+            'git',
+            [
+              'commit-tree',
+              treeSha,
+              '-p',
+              originMainSha,
+              '-m',
+              'Release 1.2.3',
+            ],
+            runInShell: true,
+            workingDirectory: d.path,
           ),
         ).called(1);
       });
+    });
+
+    test('real repository: the squash lands on main, HEAD stays on the '
+        'feature branch and no checkout ever happens', () async {
+      // A real repo pair: main is pushed, the feature branch is ahead of it.
+      final local = await Directory.systemTemp.createTemp('merge_flow_real_');
+      final remote = await Directory.systemTemp.createTemp(
+        'merge_flow_real_remote_',
+      );
+      addTearDown(() async {
+        await local.delete(recursive: true);
+        await remote.delete(recursive: true);
+      });
+      await initLocalGit(local);
+      await initRemoteGit(remote);
+      await addRemoteToLocal(local: local, remote: remote);
+
+      Future<String> git(List<String> args) async {
+        final result = await Process.run(
+          'git',
+          args,
+          workingDirectory: local.path,
+        );
+        expect(result.exitCode, 0, reason: 'git $args: ${result.stderr}');
+        return (result.stdout as String).trim();
+      }
+
+      await git(['checkout', '-b', 'feat_real']);
+      File(
+        '${local.path}/feature.txt',
+      ).writeAsStringSync('the release content');
+      await git(['add', 'feature.txt']);
+      await git(['commit', '-m', 'Add feature']);
+      await git(['push', '--set-upstream', 'origin', 'feat_real']);
+
+      final mainShaBefore = await git(['rev-parse', 'refs/heads/main']);
+      final checkoutsBefore = (await git([
+        'reflog',
+      ])).split('\n').where((l) => l.contains('checkout:')).length;
+
+      // Everything real — git, CanMerge, GgState, MainBranch.
+      final realFlow = MergeFlow(ggLog: ggLog);
+      await realFlow.get(
+        directory: local,
+        ggLog: ggLog,
+        message: 'The real release',
+      );
+
+      // HEAD never moved: still on the feature branch, and the reflog shows
+      // not a single new checkout — the reason this flow exists, because a
+      // checkout of the old main state makes editor tooling descend on the
+      // worktree and rewrite lock files mid-release.
+      expect(await git(['rev-parse', '--abbrev-ref', 'HEAD']), 'feat_real');
+      final checkoutsAfter = (await git([
+        'reflog',
+      ])).split('\n').where((l) => l.contains('checkout:')).length;
+      expect(checkoutsAfter, checkoutsBefore);
+
+      // The squash commit sits on main: parented on the old main tip,
+      // carrying the feature branch's release content and the merge
+      // message. (feat_real itself moved one commit further in the
+      // meantime — the doCommit state bookkeeping — so the trees are
+      // compared via the released file, not via the branch tips.)
+      final mainShaAfter = await git(['rev-parse', 'refs/heads/main']);
+      expect(mainShaAfter, isNot(mainShaBefore));
+      expect(await git(['rev-parse', 'main^']), mainShaBefore);
+      expect(await git(['show', 'main:feature.txt']), 'the release content');
+      expect(
+        await git(['log', '-1', '--format=%s', 'main']),
+        'The real release',
+      );
     });
   });
 }
