@@ -496,11 +496,14 @@ class MergeFlow {
         message: message,
       );
 
-      // Block until the provider merged the pull request.
+      // Block until the provider merged the pull request. The pull request
+      // above carries auto-merge, so the wait reports its url instead of
+      // asking the user to merge it by hand.
       await _waitForMerge.get(
         directory: directory,
         ggLog: ggLog,
         branch: sourceBranch,
+        autoMerge: true,
       );
     }
 
