@@ -277,10 +277,10 @@ packages:
     dependency: "direct main"
     description:
       name: gg_one_core
-      sha256: "302d1d90c5dc120118c4577fafb81b423083a8c426218835078edaa4552000d8"
+      sha256: "60311dc468fa8c769af4bf0632891babb709cfa77ebe171e9b33baaaac88a055"
       url: "https://pub.dev"
     source: hosted
-    version: "2.4.1"
+    version: "2.4.2"
   gg_process:
     dependency: "direct main"
     description:
@@ -301,10 +301,10 @@ packages:
     dependency: "direct main"
     description:
       name: gg_publish
-      sha256: "3dd350453afef4684d2b6c6072b1c8ae6475d0e15eaddbc9060fe46fd3328e30"
+      sha256: "61d3b21de0761c36d497a1022b430d910c242a4a2ecd0ca50965602f84c01be5"
       url: "https://pub.dev"
     source: hosted
-    version: "4.3.2"
+    version: "4.3.3"
   gg_status_printer:
     dependency: "direct main"
     description:
@@ -730,4 +730,4 @@ packages:
     source: hosted
     version: "2.2.4"
 sdks:
-  dart: ">=3.11.0 <4.0.0"
+  dart: ">=3.13.0 <4.0.0"

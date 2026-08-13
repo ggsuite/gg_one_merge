@@ -28,9 +28,8 @@ class CreatePullRequest {
   CreatePullRequest({
     required this.ggLog,
     gg_merge.MergeGit? mergeGit,
-    GgProcessWrapper processWrapper = const GgProcessWrapper(),
-  }) : _mergeGit = mergeGit ?? gg_merge.MergeGit(ggLog: ggLog),
-       _processWrapper = processWrapper;
+    this._processWrapper = const GgProcessWrapper(),
+  }) : _mergeGit = mergeGit ?? gg_merge.MergeGit(ggLog: ggLog);
 
   /// The log function
   final GgLog ggLog;

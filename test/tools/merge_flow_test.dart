@@ -1323,17 +1323,17 @@ void main() {
       }
 
       await git(['checkout', '-b', 'feat_real']);
-      File(
-        '${local.path}/feature.txt',
-      ).writeAsStringSync('the release content');
+      File('${local.path}/feature.txt')
+          .writeAsStringSync('the release content');
       await git(['add', 'feature.txt']);
       await git(['commit', '-m', 'Add feature']);
       await git(['push', '--set-upstream', 'origin', 'feat_real']);
 
       final mainShaBefore = await git(['rev-parse', 'refs/heads/main']);
-      final checkoutsBefore = (await git([
-        'reflog',
-      ])).split('\n').where((l) => l.contains('checkout:')).length;
+      final checkoutsBefore = (await git(['reflog']))
+          .split('\n')
+          .where((l) => l.contains('checkout:'))
+          .length;
 
       // Everything real — git, CanMerge, GgState, MainBranch.
       final realFlow = MergeFlow(ggLog: ggLog);
@@ -1348,9 +1348,10 @@ void main() {
       // checkout of the old main state makes editor tooling descend on the
       // worktree and rewrite lock files mid-release.
       expect(await git(['rev-parse', '--abbrev-ref', 'HEAD']), 'feat_real');
-      final checkoutsAfter = (await git([
-        'reflog',
-      ])).split('\n').where((l) => l.contains('checkout:')).length;
+      final checkoutsAfter = (await git(['reflog']))
+          .split('\n')
+          .where((l) => l.contains('checkout:'))
+          .length;
       expect(checkoutsAfter, checkoutsBefore);
 
       // The squash commit sits on main: parented on the old main tip,
