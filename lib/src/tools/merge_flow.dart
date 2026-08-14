@@ -1,10 +1,11 @@
 // @license
-// Copyright (c) 2025 Göran Hegenberg. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
 import 'package:gg_one_core/gg_one_core.dart';
+
 import 'dart:io';
 
 import 'package:gg_console_colors/gg_console_colors.dart';
@@ -33,14 +34,13 @@ class MergeFlow {
     gg_merge.CanMerge? canMerge,
     gg_publish.MainBranch? mainBranch,
     GgSystemCommit? systemCommit,
-    GgProcessWrapper processWrapper = const GgProcessWrapper(),
+    this._processWrapper = const GgProcessWrapper(),
   }) : _state = state ?? GgState(ggLog: ggLog),
        _doMerge = doMerge ?? gg_merge.DoMerge(ggLog: ggLog),
        _waitForMerge = waitForMerge ?? gg_merge.WaitForMerge(ggLog: ggLog),
        _canMerge = canMerge ?? gg_merge.CanMerge(ggLog: ggLog),
        _mainBranch = mainBranch ?? gg_publish.MainBranch(ggLog: ggLog),
-       _systemCommit = systemCommit ?? GgSystemCommit(ggLog: ggLog),
-       _processWrapper = processWrapper;
+       _systemCommit = systemCommit ?? GgSystemCommit(ggLog: ggLog);
 
   /// The log function
   final GgLog ggLog;

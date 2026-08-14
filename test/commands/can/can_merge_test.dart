@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2025 Göran Hegenberg. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -35,9 +35,8 @@ void main() {
     await addAndCommitSampleFile(d);
     mockGgMergeCanMerge = MockGgMergeCanMerge();
     mockDidCommit = MockDidCommit();
-    when(
-      () => mockDidCommit.exec(directory: d, ggLog: ggLog),
-    ).thenAnswer((_) async => true);
+    when(() => mockDidCommit.exec(directory: d, ggLog: ggLog))
+        .thenAnswer((_) async => true);
     canMerge = CanMerge(
       ggLog: ggLog,
       canMerge: mockGgMergeCanMerge,
@@ -75,16 +74,14 @@ void main() {
     });
 
     test('should call gg_merge CanMerge', () async {
-      when(
-        () => mockGgMergeCanMerge.exec(directory: d, ggLog: ggLog),
-      ).thenAnswer((_) async => true);
+      when(() => mockGgMergeCanMerge.exec(directory: d, ggLog: ggLog))
+          .thenAnswer((_) async => true);
 
       await canMerge.get(directory: d, ggLog: ggLog);
 
       verify(() => mockDidCommit.exec(directory: d, ggLog: ggLog)).called(1);
-      verify(
-        () => mockGgMergeCanMerge.exec(directory: d, ggLog: ggLog),
-      ).called(1);
+      verify(() => mockGgMergeCanMerge.exec(directory: d, ggLog: ggLog))
+          .called(1);
     });
   });
 }
