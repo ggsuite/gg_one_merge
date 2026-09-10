@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Azure DevOps pull-request urls are derived through the shared helper of `gg_merge`
+
 ## 2.6.1 - 2026-09-09
 
 ## 2.6.0 - 2026-09-02
