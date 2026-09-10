@@ -6,6 +6,8 @@
 dependency_overrides:
   gg_git:
     path: ../gg_git
+  gg_lang:
+    path: ../gg_lang
   gg_merge:
     path: ../gg_merge
   gg_one_commit:
@@ -14,5 +16,7 @@ dependency_overrides:
     path: ../gg_one_core
   gg_publish:
     path: ../gg_publish
+  gg_test:
+    path: ../gg_test
   gg_version:
     path: ../gg_version
