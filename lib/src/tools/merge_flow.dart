@@ -9,6 +9,7 @@ import 'package:gg_one_core/gg_one_core.dart';
 import 'dart:io';
 
 import 'package:gg_console_colors/gg_console_colors.dart';
+import 'package:gg_git/gg_git.dart' show GitRetry;
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_merge/gg_merge.dart' as gg_merge;
 import 'package:gg_one_merge/src/tools/lock_files.dart';
@@ -35,6 +36,7 @@ class MergeFlow {
     gg_publish.MainBranch? mainBranch,
     GgSystemCommit? systemCommit,
     this._processWrapper = const GgProcessWrapper(),
+    this._gitRetry = const GitRetry(),
   }) : _state = state ?? GgState(ggLog: ggLog),
        _doMerge = doMerge ?? gg_merge.DoMerge(ggLog: ggLog),
        _waitForMerge = waitForMerge ?? gg_merge.WaitForMerge(ggLog: ggLog),
@@ -52,6 +54,7 @@ class MergeFlow {
   final gg_publish.MainBranch _mainBranch;
   final GgSystemCommit _systemCommit;
   final GgProcessWrapper _processWrapper;
+  final GitRetry _gitRetry;
 
   /// Merges the current feature branch into the default branch — locally or
   /// through an auto-complete pull request ([viaPullRequest]).
@@ -397,6 +400,7 @@ class MergeFlow {
     await _runGitCommand(
       directory: directory,
       arguments: const ['fetch'],
+      network: true,
       actionDescription: 'fetch the remote refs',
       ggLog: ggLog,
       verbose: verbose,
@@ -442,6 +446,7 @@ class MergeFlow {
       await _runGitCommand(
         directory: directory,
         arguments: const ['push'],
+        network: true,
         actionDescription:
             'push feature branch before creating the pull request',
         ggLog: ggLog,
@@ -464,6 +469,7 @@ class MergeFlow {
         await _runGitCommand(
           directory: directory,
           arguments: const ['push'],
+          network: true,
           actionDescription: 'push pre-push-hook drift commit',
           ggLog: ggLog,
           verbose: verbose,
@@ -539,6 +545,7 @@ class MergeFlow {
     await _runGitCommand(
       directory: directory,
       arguments: const ['push'],
+      network: true,
       actionDescription: 'push the recorded release state',
       ggLog: ggLog,
       verbose: verbose,
@@ -569,6 +576,7 @@ class MergeFlow {
       await _runGitCommand(
         directory: directory,
         arguments: const ['fetch'],
+        network: true,
         actionDescription: 'fetch the remote refs',
         ggLog: ggLog,
         verbose: verbose,
@@ -731,22 +739,31 @@ class MergeFlow {
   }
 
   /// Runs a git command and throws when it fails. Returns stdout on success.
+  /// A [network] command (fetch, push) is retried when the transport drops.
   Future<String> _runGitCommand({
     required Directory directory,
     required List<String> arguments,
     required String actionDescription,
     required GgLog ggLog,
     required bool verbose,
+    bool network = false,
   }) async {
     if (verbose) {
       ggLog('\$ git ${arguments.join(' ')}');
     }
-    final result = await _processWrapper.run(
+    Future<ProcessResult> run() => _processWrapper.run(
       'git',
       arguments,
       runInShell: true,
       workingDirectory: directory.path,
     );
+    final result = network
+        ? await _gitRetry.run(
+            run,
+            ggLog: ggLog,
+            description: 'git ${arguments.join(' ')}',
+          )
+        : await run();
 
     if (result.exitCode != 0) {
       final stderr = result.stderr.toString().trim();

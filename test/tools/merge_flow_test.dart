@@ -6,6 +6,7 @@
 
 import 'dart:io';
 
+import 'package:gg_git/gg_git.dart' show GitRetry;
 import 'package:gg_git/gg_git_test_helpers.dart';
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_merge/gg_merge.dart' as gg_merge;
@@ -215,6 +216,7 @@ void main() {
       mainBranch: mockMainBranch,
       systemCommit: mockSystemCommit,
       processWrapper: mockProcessWrapper,
+      gitRetry: GitRetry.example,
     );
 
     // Default: nothing pending, so no bookkeeping commit is created.
@@ -793,6 +795,63 @@ void main() {
           ['rm', '-f', '--ignore-unmatch', '.gg/.ticket.json'],
           runInShell: true,
           workingDirectory: d.path,
+        ),
+      ).called(1);
+    });
+
+    test('retries a push the remote dropped', () async {
+      stubGitCommands();
+
+      // The first push loses the connection, the second one goes through.
+      var pushes = 0;
+      when(
+        () => mockProcessWrapper.run(
+          'git',
+          ['push'],
+          runInShell: true,
+          workingDirectory: any(named: 'workingDirectory'),
+        ),
+      ).thenAnswer(
+        (_) async => ++pushes == 1
+            ? ProcessResult(
+                0,
+                128,
+                '',
+                'Connection to github.com closed by remote host.',
+              )
+            : ProcessResult(0, 0, '', ''),
+      );
+      when(
+        () => mockGgMergeDoMerge.get(
+          directory: d,
+          ggLog: ggLog,
+          automerge: true,
+          local: false,
+          verbose: false,
+          deleteSourceBranch: true,
+        ),
+      ).thenAnswer((_) async => true);
+      when(
+        () => mockWaitForMerge.get(
+          directory: d,
+          ggLog: ggLog,
+          branch: any(named: 'branch'),
+          autoMerge: any(named: 'autoMerge'),
+        ),
+      ).thenAnswer((_) async => true);
+
+      await mergeFlow.get(directory: d, ggLog: ggLog, viaPullRequest: true);
+
+      // One failed attempt, its retry, and the push of the release state.
+      expect(pushes, 3);
+      verify(
+        () => mockGgMergeDoMerge.get(
+          directory: d,
+          ggLog: ggLog,
+          automerge: true,
+          local: false,
+          verbose: false,
+          deleteSourceBranch: true,
         ),
       ).called(1);
     });

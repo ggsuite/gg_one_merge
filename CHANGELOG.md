@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.0 - 2026-09-30
+
+### Changed
+
+- MergeFlow retries its git network commands: every fetch and push of the merge flow runs through gg_git's GitRetry, so a connection the remote drops no longer ends the publish
+
 ## 2.6.6 - 2026-09-28
 
 ## 2.6.5 - 2026-09-23
