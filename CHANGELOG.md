@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- gg do commit does nothing when only system commits exist
+
 ## 2.7.1 - 2026-09-30
 
 ## 2.7.0 - 2026-09-30
