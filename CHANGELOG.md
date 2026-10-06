@@ -5,6 +5,7 @@
 ### Changed
 
 - Merge main
+- Upgrade_dependencies
 
 ## 2.7.3 - 2026-10-06
 
