@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add the blog post of ticket gg-1
+
+### Changed
+
+- Make gg checks work on Windows
+
 ## 2.7.8 - 2026-10-19
 
 ## 2.7.7 - 2026-10-16
