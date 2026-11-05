@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Tighten dependencies
+
 ### Fixed
 
 - Fix az CLI UTF-8 encoding, auto-generate ticket id/title/description, add only-PM-repo option, skip ticket cleanup prompt by default, stop auto-opening PR URLs
