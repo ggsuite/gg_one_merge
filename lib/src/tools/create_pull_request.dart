@@ -191,6 +191,7 @@ class CreatePullRequest {
       ],
       runInShell: true,
       workingDirectory: directory.path,
+      environment: gg_merge.azCliEnvironment,
     );
     if (result.exitCode != 0) {
       return null;

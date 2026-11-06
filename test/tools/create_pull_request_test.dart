@@ -111,6 +111,7 @@ void main() {
         ],
         runInShell: true,
         workingDirectory: any(named: 'workingDirectory'),
+        environment: any(named: 'environment'),
       ),
     ).thenAnswer(
       (_) async => responses[call++ < responses.length ? call - 1 : 0],
