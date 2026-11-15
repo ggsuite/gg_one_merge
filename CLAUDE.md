@@ -23,7 +23,4 @@ The package is part of the gg_one tool family (see the `gg_one` umbrella repo fo
 - Tests use `gg_git_test_helpers` (including the cached repo helpers) and `gg_capture_print`.
 
 <!-- helix:claude_md:start -->
-
-@.claude/CLAUDE_dna_gg.md
-
 <!-- helix:claude_md:end -->
